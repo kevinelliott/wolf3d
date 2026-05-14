@@ -1,0 +1,33 @@
+# Wolfenstein-Rust level format.
+#
+# One char per cell. Comments start with #. Leading/trailing whitespace
+# is stripped. Recognized tokens:
+#   .  empty floor
+#   1..9  wall texture id (indices into Atlas::walls)
+#   @  closed sliding door
+#   P  player spawn (one per map)
+#   G  guard
+#   a  ammo pickup
+#   m  medkit
+#   b  barrel (decoration)
+#   l  lamp (decoration)
+#
+# (The current build hard-codes the layout in map::Map::sample(); this
+# file is the canonical reference for the text format and is parsed by
+# Map::from_rows when level loading is wired up.)
+1111111111111111
+1..............1
+1.222..........1
+1.2............1
+1.2..P.....3...1
+1.222..........1
+1......@.......1
+1......1.......1
+1......1...444.1
+1......1.....4.1
+1......1.....4.1
+1......1.44444.1
+1..............1
+1...5..........1
+1..............1
+1111111111111111

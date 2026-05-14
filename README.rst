@@ -1,6 +1,15 @@
 Wolfenstein 3D
 ==============
 
+This repository contains two things:
+
+1. The **original 1992 DOS source** from id Software (top-level
+   ``DEICE.EXE`` installer and the ``WOLFSRC/`` directory it produces),
+   preserved unchanged.
+2. A modern **Rust rewrite** in the ``rust/`` directory that targets
+   Windows, macOS, Linux, iOS, Android, and the Web (via WebAssembly).
+   See ``rust/README.md`` for details and build instructions.
+
 The original source release was made using the ``DEICE.EXE``
 installer (DeIce) in the root directory.  (Basically a way to
 split self-extracting zip files over multiple floppy disks.)
