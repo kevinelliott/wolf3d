@@ -10,7 +10,7 @@ pub const LAST_DOOR: u8 = 127;
 
 #[inline]
 pub fn is_door(v: u8) -> bool {
-    v >= FIRST_DOOR && v <= LAST_DOOR
+    (FIRST_DOOR..=LAST_DOOR).contains(&v)
 }
 
 #[inline]

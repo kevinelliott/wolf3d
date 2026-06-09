@@ -205,8 +205,8 @@ impl Raycaster {
                 let mut c = tex.sample(tex_x, ty);
                 // Darken north/south walls to give the columns relief.
                 if side == 1 {
-                    for i in 0..3 {
-                        c[i] = (c[i] as u32 * 7 / 10) as u8;
+                    for ch in c.iter_mut().take(3) {
+                        *ch = (*ch as u32 * 7 / 10) as u8;
                     }
                 }
                 c = attenuate(c, perp);
@@ -249,7 +249,7 @@ impl Raycaster {
             let mut floor_x = player.pos.x + row_dist * ray_l.x;
             let mut floor_y = player.pos.y + row_dist * ray_l.y;
 
-            let ceiling_y = h as usize - y - 1; // mirror across horizon
+            let ceiling_y = h - y - 1; // mirror across horizon
 
             for x in 0..w {
                 let fx = floor_x - floor_x.floor();

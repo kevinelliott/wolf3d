@@ -83,8 +83,8 @@ fn make_brick(brick: [u8; 4], mortar: [u8; 4]) -> Texture {
             let in_mortar = y % 8 == 0 || (x + offset) % 16 == 0;
             let mut c = if in_mortar { mortar } else { brick };
             let noise = (rng(&mut s) & 0x1F) as i32 - 16;
-            for i in 0..3 {
-                c[i] = (c[i] as i32 + noise).clamp(0, 255) as u8;
+            for ch in c.iter_mut().take(3) {
+                *ch = (*ch as i32 + noise).clamp(0, 255) as u8;
             }
             t.put(x, y, c);
         }
@@ -99,10 +99,10 @@ fn make_panel(light: [u8; 4], dark: [u8; 4]) -> Texture {
         for x in 0..TEX_SIZE {
             let plank = x / 16;
             let base = if plank % 2 == 0 { light } else { dark };
-            let grain = ((y as i32 % 4) - 2).abs() as i32;
+            let grain = ((y as i32 % 4) - 2).abs();
             let mut c = base;
-            for i in 0..3 {
-                c[i] = (c[i] as i32 - grain * 3 + ((rng(&mut s) & 7) as i32 - 3))
+            for ch in c.iter_mut().take(3) {
+                *ch = (*ch as i32 - grain * 3 + ((rng(&mut s) & 7) as i32 - 3))
                     .clamp(0, 255) as u8;
             }
             if x % 16 == 0 {
@@ -122,8 +122,8 @@ fn make_metal(base: [u8; 4]) -> Texture {
             let mut c = base;
             let stripe = if (x + y) % 8 < 1 { -25 } else { 0 };
             let noise = (rng(&mut s) & 0xF) as i32 - 8;
-            for i in 0..3 {
-                c[i] = (c[i] as i32 + stripe + noise).clamp(0, 255) as u8;
+            for ch in c.iter_mut().take(3) {
+                *ch = (*ch as i32 + stripe + noise).clamp(0, 255) as u8;
             }
             // rivets
             if (x % 16 == 8) && (y % 16 == 8) {
@@ -157,9 +157,9 @@ fn make_door(panel: [u8; 4], trim: [u8; 4]) -> Texture {
     let mut t = Texture::new();
     for y in 0..TEX_SIZE {
         for x in 0..TEX_SIZE {
-            let c = if x < 4 || x >= TEX_SIZE - 4 || y < 4 || y >= TEX_SIZE - 4 {
+            let c = if !(4..TEX_SIZE - 4).contains(&x) || !(4..TEX_SIZE - 4).contains(&y) {
                 trim
-            } else if (x >= 28 && x <= 36) && (y >= 28 && y <= 36) {
+            } else if (28..=36).contains(&x) && (28..=36).contains(&y) {
                 [40, 40, 40, 255]
             } else {
                 panel

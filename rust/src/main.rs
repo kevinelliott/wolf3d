@@ -20,6 +20,9 @@ mod state;
 mod texture;
 mod weapon;
 
+#[cfg(test)]
+mod tests;
+
 use state::Game;
 
 fn window_conf() -> Conf {
