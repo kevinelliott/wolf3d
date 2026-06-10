@@ -1,5 +1,7 @@
 /target
-Cargo.lock
+/dist
+# Cargo.lock is intentionally committed: this crate is a binary/application,
+# so a pinned lockfile gives reproducible CI and release builds.
 *.bk
 *.swp
 .DS_Store

@@ -52,7 +52,7 @@ impl Hud {
 
         if show_fps {
             draw_text(
-                &format!("{:.0} FPS", fps),
+                format!("{:.0} FPS", fps).as_str(),
                 sw - 90.0,
                 20.0,
                 20.0,

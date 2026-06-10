@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>Wolfenstein 3D — Rust</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        canvas {
+            display: block;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            /* keep the low-res framebuffer crisp when upscaled */
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        #loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #b0b0c0;
+            font: 16px/1.4 system-ui, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading Wolfenstein 3D…</div>
+    <canvas id="glcanvas" tabindex="1"></canvas>
+
+    <!-- miniquad/macroquad JS glue, vendored locally (see web/README.md for
+         provenance + checksum) so the web build has no live CDN dependency. -->
+    <script src="mq_js_bundle.js"></script>
+    <script>
+        window.addEventListener("DOMContentLoaded", () => {
+            // Remove the loading splash once the WASM module has booted.
+            const splash = document.getElementById("loading");
+            const observer = new MutationObserver(() => {
+                if (splash) splash.style.display = "none";
+            });
+            load("wolf3d-rs.wasm");
+            // Give focus to the canvas so keyboard input works immediately.
+            const canvas = document.getElementById("glcanvas");
+            canvas.focus();
+            if (splash) setTimeout(() => (splash.style.display = "none"), 1500);
+            observer.disconnect();
+        });
+    </script>
+</body>
+</html>

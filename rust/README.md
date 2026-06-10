@@ -67,14 +67,50 @@ What's intentionally a stub (clearly marked TODOs):
 cd rust
 cargo run --release
 
-# Web (after installing the wasm32 target and a static file server)
+# Web (WebAssembly)
 rustup target add wasm32-unknown-unknown
 cargo build --release --target wasm32-unknown-unknown
-# then serve target/wasm32-unknown-unknown/release/wolf3d-rs.wasm
-# with the standard macroquad index.html template.
+# Copy the .wasm next to rust/web/{index.html,mq_js_bundle.js} and serve over
+# HTTP (see web/README.md for a one-liner). WASM can't load from file://.
 ```
 
 Minimum Rust: 1.75 (uses 2021 edition + standard glam/serde features).
+
+The web build is also served straight from `rust/web/` — see
+[`web/README.md`](web/README.md) for the local-server recipe.
+
+## Downloads
+
+Tagged releases are built automatically by GitHub Actions and attached to the
+[Releases page](https://github.com/kevinelliott/wolf3d/releases). Each release
+ships prebuilt archives for:
+
+| Platform        | Architecture       | Archive                              |
+|-----------------|--------------------|--------------------------------------|
+| Linux           | x86_64, aarch64    | `…-linux-<arch>.tar.gz` (raw binary) |
+| macOS           | Intel, Apple Silicon | `…-macos-<arch>.tar.gz` (`.app` bundle) |
+| Windows         | x86_64             | `…-windows-x86_64.zip`               |
+| Web (WASM)      | —                  | `…-web.tar.gz` (serve over HTTP)     |
+
+> **macOS Gatekeeper:** the `.app` is unsigned, so the first launch needs
+> right-click → **Open** (or `xattr -dr com.apple.quarantine "Wolfenstein 3D.app"`).
+
+### Cutting a release
+
+```sh
+# From the repo root, tag a version and push it:
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+This triggers `.github/workflows/release.yml`, which cross-builds every target
+and publishes a GitHub Release with auto-generated notes. A tag containing a
+hyphen (e.g. `v0.1.0-rc1`) is published as a pre-release. The build matrix can
+also be exercised without publishing via the workflow's **Run workflow**
+(`workflow_dispatch`) button.
+
+Every push and PR additionally runs `.github/workflows/ci.yml` (clippy with
+`-D warnings`, plus the test suite on Linux, macOS, and Windows).
 
 ## Controls
 
