@@ -1,18 +1,18 @@
-// Software raycaster. Adapted from the classic Wolfenstein-style DDA
-// (Lode's tutorial popularized this form). Renders textured walls and
-// per-pixel textured floor/ceiling into an RGBA8 framebuffer.
+// Software raycaster (DDA), faithful to Wolfenstein 3D: solid floor/ceiling
+// colors, textured walls with light/dark faces, and sliding center-of-tile
+// doors. Writes into an RGBA8 framebuffer and records a per-column depth
+// buffer for sprite occlusion.
 
-use crate::color::attenuate;
-use crate::map::{self, Map};
-use crate::math::{deg_to_rad, Vec2};
+use crate::gamedata::vswap::{Pic, TEX};
+use crate::gamedata::GameData;
+use crate::map::{door_face_page, Cell, Map};
 use crate::player::Player;
-use crate::texture::{Atlas, TEX_SIZE};
 
 pub struct Framebuffer {
     pub width: usize,
     pub height: usize,
-    pub pixels: Vec<u8>,       // RGBA8, width*height*4
-    pub z_buffer: Vec<f32>,    // per-column wall distance, for sprite occlusion
+    pub pixels: Vec<u8>,    // RGBA8
+    pub depth: Vec<f32>,    // per-column wall distance
 }
 
 impl Framebuffer {
@@ -21,25 +21,7 @@ impl Framebuffer {
             width,
             height,
             pixels: vec![0; width * height * 4],
-            z_buffer: vec![f32::INFINITY; width],
-        }
-    }
-
-    pub fn clear(&mut self, top: [u8; 4], bottom: [u8; 4]) {
-        // simple horizon clear; per-pixel floorcaster will overwrite below.
-        for y in 0..self.height {
-            let row = &mut self.pixels[y * self.width * 4..(y + 1) * self.width * 4];
-            let c = if y < self.height / 2 { top } else { bottom };
-            for x in 0..self.width {
-                let i = x * 4;
-                row[i] = c[0];
-                row[i + 1] = c[1];
-                row[i + 2] = c[2];
-                row[i + 3] = 255;
-            }
-        }
-        for z in &mut self.z_buffer {
-            *z = f32::INFINITY;
+            depth: vec![f32::INFINITY; width],
         }
     }
 
@@ -51,222 +33,183 @@ impl Framebuffer {
         self.pixels[i + 2] = c[2];
         self.pixels[i + 3] = 255;
     }
+
+    pub fn clear_floor_ceiling(&mut self, ceiling: [u8; 4], floor: [u8; 4]) {
+        let half = self.height / 2;
+        for y in 0..self.height {
+            let c = if y < half { ceiling } else { floor };
+            let row = &mut self.pixels[y * self.width * 4..(y + 1) * self.width * 4];
+            for px in row.chunks_exact_mut(4) {
+                px[0] = c[0];
+                px[1] = c[1];
+                px[2] = c[2];
+                px[3] = 255;
+            }
+        }
+        for d in &mut self.depth {
+            *d = f32::INFINITY;
+        }
+    }
 }
 
 pub struct Raycaster {
-    pub fov_radians: f32,
+    pub fov: f32,
 }
 
 impl Raycaster {
     pub fn new(fov_degrees: f32) -> Self {
         Self {
-            fov_radians: deg_to_rad(fov_degrees),
+            fov: fov_degrees.to_radians(),
         }
     }
 
-    pub fn render(
-        &self,
-        fb: &mut Framebuffer,
-        map: &Map,
-        atlas: &Atlas,
-        player: &Player,
-    ) {
+    pub fn render(&self, fb: &mut Framebuffer, map: &Map, gd: &GameData, player: &Player) {
+        fb.clear_floor_ceiling(map.ceiling_color, map.floor_color);
         let w = fb.width;
-        let h = fb.height;
-        let half_h = h as f32 * 0.5;
+        let h = fb.height as i32;
 
-        let dir = player.dir();
-        let plane = player.plane(self.fov_radians);
+        let dirx = player.angle.cos();
+        let diry = player.angle.sin();
+        let plane = player.plane(self.fov);
+        let (planex, planey) = (plane.x, plane.y);
 
-        // ---- floor + ceiling (per-pixel) ----
-        self.render_floor_ceiling(fb, map, atlas, player, dir, plane);
+        let doorwall = gd.doorwall();
 
-        // ---- walls (per-column DDA) ----
         for x in 0..w {
             let camera_x = 2.0 * x as f32 / w as f32 - 1.0;
-            let ray = Vec2::new(dir.x + plane.x * camera_x, dir.y + plane.y * camera_x);
+            let raydx = dirx + planex * camera_x;
+            let raydy = diry + planey * camera_x;
 
-            let mut map_x = player.pos.x.floor() as i32;
-            let mut map_y = player.pos.y.floor() as i32;
+            let posx = player.pos.x;
+            let posy = player.pos.y;
+            let mut mapx = posx.floor() as i32;
+            let mut mapy = posy.floor() as i32;
 
-            let delta_dx = if ray.x.abs() < 1e-20 { 1e30 } else { (1.0 / ray.x).abs() };
-            let delta_dy = if ray.y.abs() < 1e-20 { 1e30 } else { (1.0 / ray.y).abs() };
+            let ddx = if raydx.abs() < 1e-9 { 1e9 } else { (1.0 / raydx).abs() };
+            let ddy = if raydy.abs() < 1e-9 { 1e9 } else { (1.0 / raydy).abs() };
 
-            let (step_x, mut side_dx) = if ray.x < 0.0 {
-                (-1, (player.pos.x - map_x as f32) * delta_dx)
+            let (stepx, mut sdx) = if raydx < 0.0 {
+                (-1i32, (posx - mapx as f32) * ddx)
             } else {
-                (1, (map_x as f32 + 1.0 - player.pos.x) * delta_dx)
+                (1i32, (mapx as f32 + 1.0 - posx) * ddx)
             };
-            let (step_y, mut side_dy) = if ray.y < 0.0 {
-                (-1, (player.pos.y - map_y as f32) * delta_dy)
+            let (stepy, mut sdy) = if raydy < 0.0 {
+                (-1i32, (posy - mapy as f32) * ddy)
             } else {
-                (1, (map_y as f32 + 1.0 - player.pos.y) * delta_dy)
+                (1i32, (mapy as f32 + 1.0 - posy) * ddy)
             };
 
-            let mut side = 0;
-            let mut tex_id: u8 = 1;
-            let mut door_offset = 0.0_f32;
-            let mut hit = false;
+            let mut side;
+            let mut perp = f32::INFINITY;
+            let mut tex: Option<&Pic> = None;
+            let mut wall_u = 0.0f32;
+
             for _ in 0..256 {
-                if side_dx < side_dy {
-                    side_dx += delta_dx;
-                    map_x += step_x;
+                if sdx < sdy {
+                    sdx += ddx;
+                    mapx += stepx;
                     side = 0;
                 } else {
-                    side_dy += delta_dy;
-                    map_y += step_y;
+                    sdy += ddy;
+                    mapy += stepy;
                     side = 1;
                 }
 
-                let cell = map.at(map_x, map_y);
-                if map::is_wall(cell) {
-                    tex_id = cell;
-                    hit = true;
-                    break;
-                }
-                if map::is_door(cell) {
-                    if let Some(door) = map.door_at(map_x, map_y) {
-                        // For a door, treat it as a wall in the middle of
-                        // the cell, with horizontal slide based on `open`.
-                        let perp = if side == 0 {
-                            side_dx - delta_dx
-                        } else {
-                            side_dy - delta_dy
-                        };
-                        let mid = perp + (if side == 0 { delta_dx } else { delta_dy }) * 0.5;
-                        let hit_x = player.pos.x + mid * ray.x;
-                        let hit_y = player.pos.y + mid * ray.y;
-                        let frac = if side == 0 {
-                            hit_y - hit_y.floor()
-                        } else {
-                            hit_x - hit_x.floor()
-                        };
-                        if frac > door.open {
-                            // ray strikes the (still-closed) door slab
-                            tex_id = 6;
-                            door_offset = door.open;
-                            // tweak perpendicular distance to "mid"
-                            if side == 0 {
-                                side_dx = mid + delta_dx;
-                            } else {
-                                side_dy = mid + delta_dy;
+                match map.cell(mapx, mapy) {
+                    Cell::Empty => {}
+                    Cell::Wall(page) => {
+                        if side == 0 {
+                            perp = sdx - ddx;
+                            let pageidx = page as usize;
+                            tex = gd.wall(pageidx);
+                            let mut u = posy + perp * raydy;
+                            u -= u.floor();
+                            if raydx > 0.0 {
+                                u = 1.0 - u;
                             }
-                            hit = true;
-                            break;
+                            wall_u = u;
+                        } else {
+                            perp = sdy - ddy;
+                            let pageidx = page as usize + 1; // dark face
+                            tex = gd.wall(pageidx);
+                            let mut u = posx + perp * raydx;
+                            u -= u.floor();
+                            if raydy < 0.0 {
+                                u = 1.0 - u;
+                            }
+                            wall_u = u;
+                        }
+                        break;
+                    }
+                    Cell::Door(id) => {
+                        let door = &map.doors[id];
+                        // Distance (in ray-parameter units == perp distance) to
+                        // the slab plane in the center of the cell.
+                        if door.vertical {
+                            // slab at x = mapx + 0.5
+                            if raydx.abs() < 1e-9 {
+                                continue;
+                            }
+                            let t = (mapx as f32 + 0.5 - posx) / raydx;
+                            let hity = posy + t * raydy;
+                            let fy = hity - mapy as f32;
+                            if t > 0.0 && (0.0..1.0).contains(&fy) {
+                                // door slides along y; solid part is fy < (1-pos)
+                                let slid = fy + door.position;
+                                if slid < 1.0 {
+                                    perp = t;
+                                    tex = gd.wall(door_face_page(doorwall, door.lock));
+                                    wall_u = slid;
+                                    break;
+                                }
+                            }
+                            // else: ray passes through the open gap; keep marching
+                        } else {
+                            // slab at y = mapy + 0.5
+                            if raydy.abs() < 1e-9 {
+                                continue;
+                            }
+                            let t = (mapy as f32 + 0.5 - posy) / raydy;
+                            let hitx = posx + t * raydx;
+                            let fx = hitx - mapx as f32;
+                            if t > 0.0 && (0.0..1.0).contains(&fx) {
+                                let slid = fx + door.position;
+                                if slid < 1.0 {
+                                    perp = t;
+                                    tex = gd.wall(door_face_page(doorwall, door.lock));
+                                    wall_u = slid;
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
             }
-            if !hit {
-                fb.z_buffer[x] = f32::INFINITY;
+
+            if !perp.is_finite() {
+                fb.depth[x] = f32::INFINITY;
                 continue;
             }
-
-            let perp = if side == 0 {
-                side_dx - delta_dx
-            } else {
-                side_dy - delta_dy
-            };
             let perp = perp.max(0.0001);
-            fb.z_buffer[x] = perp;
+            fb.depth[x] = perp;
 
             let line_h = (h as f32 / perp) as i32;
-            let draw_start = ((-line_h / 2) + (h as i32) / 2).max(0);
-            let draw_end = (line_h / 2 + (h as i32) / 2).min(h as i32 - 1);
+            let draw_start = ((-line_h / 2) + h / 2).max(0);
+            let draw_end = ((line_h / 2) + h / 2).min(h - 1);
 
-            // wall_x: where exactly the wall was hit, 0..1
-            let mut wall_x = if side == 0 {
-                player.pos.y + perp * ray.y
-            } else {
-                player.pos.x + perp * ray.x
-            };
-            wall_x -= wall_x.floor();
-            if tex_id == 6 {
-                wall_x = (wall_x - door_offset).clamp(0.0, 1.0);
-            }
-
-            let tex = &atlas.walls[(tex_id as usize - 1) % atlas.walls.len()];
-            let tex_x = {
-                let mut tx = (wall_x * TEX_SIZE as f32) as i32;
-                if (side == 0 && ray.x > 0.0) || (side == 1 && ray.y < 0.0) {
-                    tx = TEX_SIZE as i32 - tx - 1;
-                }
-                tx.clamp(0, TEX_SIZE as i32 - 1) as usize
+            let tex_x = ((wall_u * TEX as f32) as i32).clamp(0, TEX as i32 - 1) as usize;
+            let tex = match tex {
+                Some(t) => t,
+                None => continue,
             };
 
-            // Step through texture v per screen y.
-            let step = TEX_SIZE as f32 / line_h as f32;
-            let mut tex_pos =
-                (draw_start as f32 - half_h + line_h as f32 * 0.5) * step;
-
+            let step = TEX as f32 / line_h as f32;
+            let mut tex_pos = (draw_start - h / 2 + line_h / 2) as f32 * step;
             for y in draw_start..=draw_end {
-                let ty = (tex_pos as i32).clamp(0, TEX_SIZE as i32 - 1) as usize;
+                let ty = (tex_pos as i32).clamp(0, TEX as i32 - 1) as usize;
                 tex_pos += step;
-                let mut c = tex.sample(tex_x, ty);
-                // Darken north/south walls to give the columns relief.
-                if side == 1 {
-                    for ch in c.iter_mut().take(3) {
-                        *ch = (*ch as u32 * 7 / 10) as u8;
-                    }
-                }
-                c = attenuate(c, perp);
-                fb.put(x, y as usize, c);
-            }
-        }
-    }
-
-    fn render_floor_ceiling(
-        &self,
-        fb: &mut Framebuffer,
-        map: &Map,
-        atlas: &Atlas,
-        player: &Player,
-        dir: Vec2,
-        plane: Vec2,
-    ) {
-        let w = fb.width;
-        let h = fb.height;
-        let half_h = h as f32 * 0.5;
-
-        // Pick a "floor" texture and a tinted "ceiling" texture.
-        // Use wall #3 (wood panel) as the floor, plain solid for ceiling.
-        let floor_tex = &atlas.walls[2];
-
-        for y in (h / 2 + 1)..h {
-            let p = y as f32 - half_h;
-            if p <= 0.0 {
-                continue;
-            }
-            let row_dist = half_h / p;
-
-            // Leftmost and rightmost ray on this row.
-            let ray_l = Vec2::new(dir.x - plane.x, dir.y - plane.y);
-            let ray_r = Vec2::new(dir.x + plane.x, dir.y + plane.y);
-            let floor_step = Vec2::new(
-                row_dist * (ray_r.x - ray_l.x) / w as f32,
-                row_dist * (ray_r.y - ray_l.y) / w as f32,
-            );
-            let mut floor_x = player.pos.x + row_dist * ray_l.x;
-            let mut floor_y = player.pos.y + row_dist * ray_l.y;
-
-            let ceiling_y = h - y - 1; // mirror across horizon
-
-            for x in 0..w {
-                let fx = floor_x - floor_x.floor();
-                let fy = floor_y - floor_y.floor();
-                let tx = (fx * TEX_SIZE as f32) as usize;
-                let ty = (fy * TEX_SIZE as f32) as usize;
-                let mut fc = floor_tex.sample(tx, ty);
-                // Floor: warmer; Ceiling: cooler tint.
-                fc = attenuate(fc, row_dist);
-                fb.put(x, y, fc);
-
-                let mut cc = map.ceiling_color;
-                cc = attenuate(cc, row_dist);
-                fb.put(x, ceiling_y, cc);
-
-                floor_x += floor_step.x;
-                floor_y += floor_step.y;
+                let c = tex.rgba[ty * TEX + tex_x];
+                fb.put(x, y as usize, [c[0], c[1], c[2], 255]);
             }
         }
     }

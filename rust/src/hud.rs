@@ -1,154 +1,108 @@
-// Heads-up display: weapon sprite, status bar, minimap overlay.
-// We draw using macroquad's immediate-mode primitives on top of the
-// framebuffer texture.
+// Status bar HUD, drawn with macroquad primitives in the bottom strip of the
+// virtual 320x200 screen. Mirrors the original layout: floor, score, lives,
+// face, health, ammo, keys, weapon. (Authentic VGAGRAPH art/face is a
+// follow-up; this is a faithful functional reconstruction.)
 
 use macroquad::prelude::*;
+use wolf3d_rs::player::Player;
+use wolf3d_rs::weapon::weapon_by_slot;
 
-use crate::entity::{Entity, EntityKind};
-use crate::map::Map;
-use crate::player::Player;
-use crate::weapon::weapon_by_slot;
-
-pub struct Hud {
-    pub show_minimap: bool,
+pub struct Layout {
+    pub ox: f32,
+    pub oy: f32,
+    pub scale: f32,
 }
+
+impl Layout {
+    pub fn px(&self, vx: f32, vy: f32) -> (f32, f32) {
+        (self.ox + vx * self.scale, self.oy + vy * self.scale)
+    }
+}
+
+pub struct Hud;
 
 impl Hud {
     pub fn new() -> Self {
-        Self { show_minimap: true }
+        Hud
     }
 
-    pub fn draw(&self, player: &Player, map: &Map, entities: &[Entity], fps: f32, show_fps: bool) {
-        let sw = screen_width();
-        let sh = screen_height();
+    /// Draw the status bar within virtual y = 160..200.
+    pub fn draw_status_bar(&self, lo: &Layout, player: &Player, floor: usize, face_frame: usize) {
+        let s = lo.scale;
+        let (bx, by) = lo.px(0.0, 160.0);
+        draw_rectangle(bx, by, 320.0 * s, 40.0 * s, Color::from_rgba(0, 56, 56, 255));
+        draw_rectangle(bx, by, 320.0 * s, 2.0 * s, Color::from_rgba(0, 96, 96, 255));
 
-        // Status bar across the bottom.
-        let bar_h = sh * 0.10;
-        draw_rectangle(0.0, sh - bar_h, sw, bar_h, Color::new(0.07, 0.07, 0.1, 0.9));
-        draw_rectangle_lines(0.0, sh - bar_h, sw, bar_h, 2.0, Color::new(0.5, 0.5, 0.6, 1.0));
+        self.field(lo, 8.0, "FLOOR", &format!("{}", floor + 1));
+        self.field(lo, 48.0, "SCORE", &format!("{}", player.score));
+        self.field(lo, 110.0, "LIVES", &format!("{}", player.lives));
 
-        let font_size = (bar_h * 0.32).max(14.0);
-        let y_text = sh - bar_h * 0.55;
+        // Face box
+        let (fx, fy) = lo.px(148.0, 164.0);
+        draw_rectangle(fx, fy, 32.0 * s, 32.0 * s, BLACK);
+        self.draw_face(fx + 2.0 * s, fy + 2.0 * s, 28.0 * s, player, face_frame);
+
+        let hp_col = if player.health < 30 {
+            Color::from_rgba(255, 60, 60, 255)
+        } else {
+            WHITE
+        };
+        self.field_label(lo, 186.0, "HEALTH");
+        let (hx, hy) = lo.px(186.0, 184.0);
+        draw_text(&format!("{}%", player.health), hx, hy, 13.0 * s, hp_col);
+
+        self.field_label(lo, 224.0, "AMMO");
+        let (ax, ay) = lo.px(224.0, 184.0);
+        draw_text(&format!("{}", player.ammo), ax, ay, 13.0 * s, WHITE);
+
+        // Keys
+        let (kx, ky) = lo.px(250.0, 164.0);
+        draw_rectangle_lines(kx - 1.0, ky - 1.0, 10.0 * s, 32.0 * s, 1.0, Color::from_rgba(0, 96, 96, 255));
+        if player.gold_key {
+            draw_rectangle(kx, ky, 8.0 * s, 14.0 * s, Color::from_rgba(255, 220, 40, 255));
+        }
+        if player.silver_key {
+            draw_rectangle(kx, ky + 16.0 * s, 8.0 * s, 14.0 * s, Color::from_rgba(210, 210, 230, 255));
+        }
 
         let w = weapon_by_slot(player.current_weapon);
-        let stats = format!(
-            "HP {:>3}  ARM {:>3}  AMMO {:>3}  SCORE {:>6}  WPN {}",
-            player.health, player.armor, player.ammo, player.score, w.name
-        );
-        draw_text(&stats, sw * 0.02, y_text, font_size, WHITE);
-
-        // Crosshair.
-        let cx = sw * 0.5;
-        let cy = (sh - bar_h) * 0.5;
-        draw_line(cx - 6.0, cy, cx + 6.0, cy, 2.0, Color::new(1.0, 1.0, 1.0, 0.7));
-        draw_line(cx, cy - 6.0, cx, cy + 6.0, 2.0, Color::new(1.0, 1.0, 1.0, 0.7));
-
-        // Weapon sprite (a simple shape — replace with art later).
-        self.draw_weapon(player, sw, sh - bar_h);
-
-        if self.show_minimap {
-            self.draw_minimap(player, map, entities, sw, sh - bar_h);
-        }
-
-        if show_fps {
-            draw_text(
-                format!("{:.0} FPS", fps).as_str(),
-                sw - 90.0,
-                20.0,
-                20.0,
-                Color::new(0.9, 0.9, 0.9, 0.8),
-            );
-        }
-
-        // Damage / muzzle flash overlay.
-        if player.muzzle_flash > 0.0 {
-            draw_rectangle(
-                0.0,
-                0.0,
-                sw,
-                sh - bar_h,
-                Color::new(1.0, 0.9, 0.5, player.muzzle_flash * 1.5),
-            );
-        }
-        if player.health < 30 {
-            let pulse = (get_time() as f32 * 3.0).sin() * 0.05 + 0.18;
-            draw_rectangle(0.0, 0.0, sw, sh, Color::new(0.9, 0.0, 0.0, pulse * 0.4));
-        }
+        let (wx, wy) = lo.px(268.0, 184.0);
+        draw_text(w.name, wx, wy, 9.0 * s, WHITE);
     }
 
-    fn draw_weapon(&self, player: &Player, sw: f32, view_h: f32) {
-        // Simple block-and-trim weapon hands.
-        let bob = (get_time() as f32 * 6.0).sin() * 6.0 * player.move_speed.signum();
-        let cx = sw * 0.5;
-        let base_y = view_h + bob;
-        let w = sw * 0.22;
-        let h = view_h * 0.45;
-        let x = cx - w * 0.5;
-        let y = base_y - h;
-        let muzzle = player.muzzle_flash > 0.0;
-        let body = if muzzle {
-            Color::new(0.7, 0.6, 0.4, 1.0)
+    fn field(&self, lo: &Layout, vx: f32, title: &str, value: &str) {
+        self.field_label(lo, vx, title);
+        let (vxp, vyp) = lo.px(vx, 184.0);
+        draw_text(value, vxp, vyp, 14.0 * lo.scale, WHITE);
+    }
+    fn field_label(&self, lo: &Layout, vx: f32, title: &str) {
+        let (tx, ty) = lo.px(vx, 168.0);
+        draw_text(title, tx, ty, 8.0 * lo.scale, Color::from_rgba(150, 200, 200, 255));
+    }
+
+    fn draw_face(&self, x: f32, y: f32, size: f32, player: &Player, frame: usize) {
+        let skin = if player.dead {
+            Color::from_rgba(120, 20, 20, 255)
+        } else if player.health < 30 {
+            Color::from_rgba(200, 130, 110, 255)
         } else {
-            Color::new(0.3, 0.3, 0.35, 1.0)
+            Color::from_rgba(225, 170, 140, 255)
         };
-        draw_rectangle(x, y, w, h, body);
-        draw_rectangle(x + w * 0.30, y - h * 0.25, w * 0.4, h * 0.25, body);
-        draw_rectangle_lines(x, y, w, h, 3.0, Color::new(0.1, 0.1, 0.1, 1.0));
-        if muzzle {
-            let mx = cx;
-            let my = y;
-            draw_circle(mx, my, 22.0, Color::new(1.0, 0.95, 0.5, 0.95));
-            draw_circle(mx, my, 10.0, Color::new(1.0, 1.0, 0.9, 1.0));
-        }
-    }
-
-    fn draw_minimap(&self, player: &Player, map: &Map, entities: &[Entity], sw: f32, view_h: f32) {
-        let cell = 8.0_f32;
-        let mw = map.width as f32 * cell;
-        let mh = map.height as f32 * cell;
-        let pad = 12.0;
-        let ox = sw - mw - pad;
-        let oy = pad;
-        draw_rectangle(ox - 4.0, oy - 4.0, mw + 8.0, mh + 8.0, Color::new(0.0, 0.0, 0.0, 0.6));
-        for y in 0..map.height {
-            for x in 0..map.width {
-                let v = map.cells[y * map.width + x];
-                let c = if crate::map::is_wall(v) {
-                    Color::new(0.7, 0.7, 0.75, 1.0)
-                } else if crate::map::is_door(v) {
-                    Color::new(0.8, 0.6, 0.2, 1.0)
-                } else {
-                    Color::new(0.15, 0.15, 0.18, 0.7)
-                };
-                draw_rectangle(ox + x as f32 * cell, oy + y as f32 * cell, cell, cell, c);
-            }
-        }
-        // entities
-        for e in entities {
-            if !e.alive {
-                continue;
-            }
-            let c = match e.kind {
-                EntityKind::Guard => Color::new(0.9, 0.2, 0.2, 1.0),
-                EntityKind::AmmoPickup => Color::new(0.9, 0.9, 0.2, 1.0),
-                EntityKind::MedkitPickup => Color::new(0.2, 0.9, 0.4, 1.0),
-                EntityKind::Decoration => Color::new(0.6, 0.6, 0.6, 1.0),
-            };
-            draw_rectangle(
-                ox + e.pos.x * cell - 2.0,
-                oy + e.pos.y * cell - 2.0,
-                4.0,
-                4.0,
-                c,
-            );
-        }
-        // player
-        let px = ox + player.pos.x * cell;
-        let py = oy + player.pos.y * cell;
-        draw_circle(px, py, 3.0, Color::new(0.2, 0.8, 1.0, 1.0));
-        let d = player.dir();
-        draw_line(px, py, px + d.x * 12.0, py + d.y * 12.0, 1.5, Color::new(0.2, 0.8, 1.0, 1.0));
-        // suppress unused-view_h warning
-        let _ = view_h;
+        draw_rectangle(x, y, size, size, skin);
+        draw_rectangle(x, y, size, size * 0.22, Color::from_rgba(120, 70, 30, 255));
+        let eye = Color::from_rgba(20, 20, 40, 255);
+        let dx = match frame % 3 {
+            0 => -0.06,
+            1 => 0.0,
+            _ => 0.06,
+        } * size;
+        draw_rectangle(x + size * 0.25 + dx, y + size * 0.4, size * 0.12, size * 0.12, eye);
+        draw_rectangle(x + size * 0.6 + dx, y + size * 0.4, size * 0.12, size * 0.12, eye);
+        let mouth = if player.dead {
+            Color::from_rgba(80, 10, 10, 255)
+        } else {
+            Color::from_rgba(150, 80, 70, 255)
+        };
+        draw_rectangle(x + size * 0.3, y + size * 0.68, size * 0.4, size * 0.1, mouth);
     }
 }
