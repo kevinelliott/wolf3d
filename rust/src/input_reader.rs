@@ -47,9 +47,6 @@ impl InputReader {
         if is_key_down(KeyCode::Q) {
             s.strafe -= 1.0;
         }
-        if is_key_down(KeyCode::E) && false {
-            // reserved
-        }
 
         let (mx, _my) = mouse_position();
         if let Some(px) = self.prev_mouse_x {

@@ -4,6 +4,7 @@
 # so a pinned lockfile gives reproducible CI and release builds.
 *.bk
 *.swp
+*.ppm
 .DS_Store
 
 # Original game data (user-supplied; shareware WL1 is freely distributable)
@@ -11,5 +12,3 @@ gamedata/*.WL1
 gamedata/*.WL6
 gamedata/*.SOD
 gamedata/*.SD*
-/target
-*.ppm

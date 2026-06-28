@@ -178,6 +178,7 @@ impl Game {
                     self.set_phase(Phase::Menu);
                 }
                 if input.cancel {
+                    self.config.save();
                     self.quit = true;
                 }
             }

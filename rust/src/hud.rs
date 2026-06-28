@@ -49,11 +49,11 @@ impl Hud {
         };
         self.field_label(lo, 186.0, "HEALTH");
         let (hx, hy) = lo.px(186.0, 184.0);
-        draw_text(&format!("{}%", player.health), hx, hy, 13.0 * s, hp_col);
+        draw_text(format!("{}%", player.health), hx, hy, 13.0 * s, hp_col);
 
         self.field_label(lo, 224.0, "AMMO");
         let (ax, ay) = lo.px(224.0, 184.0);
-        draw_text(&format!("{}", player.ammo), ax, ay, 13.0 * s, WHITE);
+        draw_text(format!("{}", player.ammo), ax, ay, 13.0 * s, WHITE);
 
         // Keys
         let (kx, ky) = lo.px(250.0, 164.0);

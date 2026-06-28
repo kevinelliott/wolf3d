@@ -91,7 +91,11 @@ fn enemy_sprite(e: &Enemy, _pos: Vec2, view_from_player: f32) -> usize {
         EState::Dead => d.dead,
         EState::Die => d.die + e.anim_frame.min(d.die_frames - 1),
         EState::Pain => {
-            if e.anim_frame % 2 == 0 { d.pain1 } else { d.pain2 }
+            if e.anim_frame.is_multiple_of(2) {
+                d.pain1
+            } else {
+                d.pain2
+            }
         }
         EState::Shoot => d.shoot + e.anim_frame.min(d.shoot_frames - 1),
         EState::Stand => {

@@ -83,7 +83,7 @@ impl Map {
             for x in 0..w {
                 let t = level.p0(x, y);
                 if (FIRST_DOOR..=LAST_DOOR).contains(&t) {
-                    let vertical = (t - FIRST_DOOR) % 2 == 0;
+                    let vertical = (t - FIRST_DOOR).is_multiple_of(2);
                     let lock = if vertical {
                         ((t - FIRST_DOOR) / 2) as u8
                     } else {
@@ -277,7 +277,7 @@ pub enum UseResult {
 pub fn door_face_page(doorwall: usize, lock: u8) -> usize {
     let off = match lock {
         5 => tables::DOOR_FACE_ELEVATOR,
-        1 | 2 | 3 | 4 => tables::DOOR_FACE_LOCKED,
+        1..=4 => tables::DOOR_FACE_LOCKED,
         _ => tables::DOOR_FACE_NORMAL,
     };
     doorwall + off

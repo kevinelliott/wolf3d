@@ -83,8 +83,10 @@ fn main() {
     let dt = 1.0 / 60.0;
     for _ in 0..steps {
         if walk {
-            let mut input = wolf3d_rs::input::InputState::default();
-            input.forward = 1.0;
+            let input = wolf3d_rs::input::InputState {
+                forward: 1.0,
+                ..Default::default()
+            };
             player.apply_input(&input, &map, dt);
         }
         map.update(dt);

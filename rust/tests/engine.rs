@@ -57,8 +57,10 @@ fn player_cannot_tunnel_walls() {
     let level = make_level(8, 8, &[]);
     let (map, _) = Map::from_level(&level, 0);
     let mut p = Player::new(Vec2::new(1.5, 1.5), std::f32::consts::PI); // face west into wall
-    let mut input = wolf3d_rs::input::InputState::default();
-    input.forward = 1.0;
+    let input = wolf3d_rs::input::InputState {
+        forward: 1.0,
+        ..Default::default()
+    };
     for _ in 0..240 {
         p.apply_input(&input, &map, 1.0 / 60.0);
     }
