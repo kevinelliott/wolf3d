@@ -18,6 +18,7 @@ use crate::audio::Audio;
 use crate::config::Config;
 use crate::hud::{Hud, Layout};
 use crate::input_reader::InputReader;
+use crate::vga_textures::VgaTextures;
 
 const VIEW_W: usize = 640;
 const VIEW_H: usize = 320;
@@ -38,6 +39,7 @@ pub struct Game {
     gd: GameData,
     config: Config,
     audio: Audio,
+    vga: VgaTextures,
     input: InputReader,
     hud: Hud,
 
@@ -74,7 +76,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(gd: GameData, config: Config, audio: Audio) -> Self {
+    pub fn new(gd: GameData, config: Config, audio: Audio, vga: VgaTextures) -> Self {
         let level = gd.maps.levels[0].clone();
         let (map, spawn) = Map::from_level(&level, 0);
         let player = Player::new(spawn.pos, spawn.angle);
@@ -89,6 +91,7 @@ impl Game {
             gd,
             config,
             audio,
+            vga,
             input,
             hud: Hud::new(),
             difficulty: 1,
@@ -389,8 +392,13 @@ impl Game {
                 if self.phase == Phase::LevelComplete {
                     self.draw_intermission(&lo);
                 } else {
-                    self.hud
-                        .draw_status_bar(&lo, &self.player, self.level_index, self.face_frame);
+                    self.hud.draw_status_bar(
+                        &lo,
+                        &self.vga,
+                        &self.player,
+                        self.level_index,
+                        self.face_frame,
+                    );
                     if self.phase == Phase::Dead {
                         self.draw_flash(&lo, Color::from_rgba(180, 0, 0, 120));
                     }
@@ -471,17 +479,25 @@ impl Game {
     }
 
     fn draw_title(&self, lo: &Layout) {
-        draw_rectangle(
-            lo.ox,
-            lo.oy,
-            320.0 * lo.scale,
-            200.0 * lo.scale,
-            Color::from_rgba(20, 20, 40, 255),
-        );
-        self.text_centered(lo, "WOLFENSTEIN 3D", 60.0, 28.0, Color::from_rgba(200, 40, 40, 255));
-        self.text_centered(lo, "Rust Port", 92.0, 14.0, Color::from_rgba(220, 220, 80, 255));
-        self.text_centered(lo, self.gd.set.title(), 120.0, 9.0, WHITE);
-        self.text_centered(lo, "Press Enter", 150.0, 12.0, WHITE);
+        if let Some(title) = &self.vga.title {
+            // authentic 320x200 title screen
+            lo.blit(title, 0.0, 0.0, 320.0, 200.0);
+            // subtle prompt overlay
+            let a = ((self.phase_t * 3.0).sin() * 0.4 + 0.6).clamp(0.0, 1.0);
+            self.text_centered(lo, "Press Enter", 186.0, 10.0, Color::new(1.0, 1.0, 1.0, a));
+        } else {
+            draw_rectangle(
+                lo.ox,
+                lo.oy,
+                320.0 * lo.scale,
+                200.0 * lo.scale,
+                Color::from_rgba(20, 20, 40, 255),
+            );
+            self.text_centered(lo, "WOLFENSTEIN 3D", 60.0, 28.0, Color::from_rgba(200, 40, 40, 255));
+            self.text_centered(lo, "Rust Port", 92.0, 14.0, Color::from_rgba(220, 220, 80, 255));
+            self.text_centered(lo, self.gd.set.title(), 120.0, 9.0, WHITE);
+            self.text_centered(lo, "Press Enter", 150.0, 12.0, WHITE);
+        }
     }
 
     fn draw_menu(&self, lo: &Layout) {

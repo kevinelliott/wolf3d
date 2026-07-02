@@ -73,6 +73,9 @@ shareware data):
   VGA palette extracted from the original `GAMEPAL.OBJ`.
 - **GAMEMAPS / MAPHEAD** — Carmack + RLEW decompression into the real 64×64
   level planes.
+- **VGAGRAPH / VGAHEAD / VGADICT** — Huffman-compressed UI art: the
+  authentic title screen, status bar, and BJ Blazkowicz's health-reactive
+  face frames (optional; the game runs without these files).
 - Map/object/enemy/door/sound code tables taken directly from the original
   `WOLFSRC` C source.
 
@@ -86,7 +89,10 @@ shareware data):
   machines, line-of-sight activation, and difficulty-gated spawns.
 - Four **weapons** with the real player-view sprites and firing animation;
   pickups for ammo, health, treasure, keys, and weapons.
-- **Status-bar HUD** (floor, score, lives, face, health, ammo, keys, weapon).
+- **Status-bar HUD** using the original bar art and BJ's real face (which
+  degrades with health, as in the original), with floor / score / lives /
+  health / ammo / keys overlaid at the original coordinates.
+- The **authentic title screen** straight from VGAGRAPH.
 - **Digitized sound effects** via the original AdLib→digi map.
 - **Game flow:** title → difficulty menu → "Get Psyched!" → play →
   level-complete tally → death/lives → game over / victory.
@@ -133,9 +139,9 @@ rust/
 
 ## Not yet implemented
 
-- **VGAGRAPH** UI art (authentic title screen, menu graphics, BJ
-  Blazkowicz's animated face, and bitmap fonts) — the HUD/menus currently
-  use a functional reconstruction.
+- **VGAGRAPH fonts and menu art** — the difficulty menu and intermission
+  screens use system text rather than the original bitmap fonts (the title
+  screen, status bar, and face already use the real art).
 - **AdLib/IMF music** (needs an OPL2 synth); only digitized SFX play.
 - Save/load, high-score table, demos, and the end-of-episode boss cutscenes.
 

@@ -9,11 +9,13 @@
 pub mod gamemaps;
 pub mod palette;
 pub mod tables;
+pub mod vga;
 pub mod vswap;
 
 use std::path::{Path, PathBuf};
 
 pub use gamemaps::{Level, Maps};
+pub use vga::Vga;
 pub use vswap::{Pic, Vswap};
 
 /// Which data set was found.
@@ -45,6 +47,7 @@ pub struct GameData {
     pub set: DataSet,
     pub vswap: Vswap,
     pub maps: Maps,
+    pub vga: Option<Vga>,
     pub sprite_start: usize,
 }
 
@@ -130,12 +133,23 @@ fn try_load_set(dir: &Path, set: DataSet) -> Option<GameData> {
     let maps = Maps::parse(&maphead_bytes, &gamemaps_bytes).ok()?;
     let sprite_start = vswap.sprite_start;
 
+    // VGAGRAPH is optional (UI art); the game runs without it.
+    let vga = load_vga(dir, ext);
+
     Some(GameData {
         set,
         vswap,
         maps,
+        vga,
         sprite_start,
     })
+}
+
+fn load_vga(dir: &Path, ext: &str) -> Option<Vga> {
+    let dict = std::fs::read(find_file(dir, "VGADICT", ext)?).ok()?;
+    let head = std::fs::read(find_file(dir, "VGAHEAD", ext)?).ok()?;
+    let graph = std::fs::read(find_file(dir, "VGAGRAPH", ext)?).ok()?;
+    Vga::parse(&dict, &head, &graph).ok()
 }
 
 /// Case-insensitive file lookup for `NAME.EXT`.

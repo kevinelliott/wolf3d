@@ -9,6 +9,7 @@ mod config;
 mod hud;
 mod input_reader;
 mod state;
+mod vga_textures;
 
 use state::Game;
 
@@ -38,7 +39,8 @@ async fn main() {
     };
 
     let audio = audio::Audio::load(&gd, cfg.sfx_volume).await;
-    let mut game = Game::new(gd, cfg, audio);
+    let vga = vga_textures::VgaTextures::build(&gd);
+    let mut game = Game::new(gd, cfg, audio, vga);
 
     let mut accumulator = 0.0_f32;
     let fixed_dt = 1.0 / 60.0_f32;
